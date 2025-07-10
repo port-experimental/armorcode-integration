@@ -1,0 +1,24 @@
+{
+  "identifier": "armorcodeSubProduct",
+  "title": "Armorcode Sub-Product",
+  "icon": "Git",
+  "schema": {
+    "properties": {
+      "name": { "type": "string", "title": "Name" },
+      "repoLink": { "type": "string", "title": "Repository Link", "format": "url" },
+      "programmingLanguage": { "type": "string", "title": "Language" },
+      "technologies": { "type": "array", "title": "Technologies", "items": { "type": "string" } }
+    },
+    "required": ["name"]
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "relations": {
+    "product": {
+      "title": "Product",
+      "target": "armorcodeProduct",
+      "required": false,
+      "many": false
+    }
+  }
+} 

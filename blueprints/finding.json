@@ -1,0 +1,47 @@
+{
+  "identifier": "armorcodeFinding",
+  "title": "Armorcode Finding",
+  "icon": "Bug",
+  "schema": {
+    "properties": {
+      "title": { "type": "string", "title": "Title" },
+      "status": {
+        "type": "string",
+        "title": "Status",
+        "enum": ["OPEN", "CLOSED", "ACTIVE", "IN_PROGRESS", "RESOLVED"],
+        "enumColors": {
+          "OPEN": "#FF0000",
+          "ACTIVE": "#FF0000",
+          "CLOSED": "#008000",
+          "RESOLVED": "#008000",
+          "IN_PROGRESS": "#0000FF"
+        }
+      },
+      "severity": {
+        "type": "string",
+        "title": "Severity",
+        "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL", "UNKNOWN"]
+      },
+      "age": { "type": "number", "title": "Age (days)" },
+      "tool": { "type": "string", "title": "Tool" },
+      "link": { "type": "string", "title": "Link to Finding", "format": "url" }
+    },
+    "required": ["title", "status", "severity"]
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "relations": {
+    "subProduct": {
+      "title": "Sub-Product",
+      "target": "armorcodeSubProduct",
+      "required": true,
+      "many": false
+    },
+    "vulnerability": {
+      "title": "Vulnerability",
+      "target": "armorcodeVulnerability",
+      "required": true,
+      "many": false
+    }
+  }
+} 

@@ -1,0 +1,17 @@
+{
+  "identifier": "armorcodeProduct",
+  "title": "Armorcode Product",
+  "icon": "Package",
+  "schema": {
+    "properties": {
+      "name": { "type": "string", "title": "Name" },
+      "description": { "type": "string", "title": "Description" },
+      "businessOwner": { "type": "string", "title": "Business Owner" },
+      "securityOwner": { "type": "string", "title": "Security Owner" }
+    },
+    "required": ["name"]
+  },
+  "mirrorProperties": {},
+  "calculationProperties": {},
+  "relations": {}
+} 
