@@ -1,3 +1,5 @@
 requests
 python-dotenv
-git+https://github.com/armor-code/acsdk 
+git+https://github.com/armor-code/acsdk
+pytest
+pytest-asyncio 
