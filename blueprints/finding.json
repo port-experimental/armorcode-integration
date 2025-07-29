@@ -12,14 +12,16 @@
           "CLOSED",
           "ACTIVE",
           "IN_PROGRESS",
-          "RESOLVED"
+          "RESOLVED",
+          "TRIAGE"
         ],
         "enumColors": {
           "OPEN": "paleBlue",
           "ACTIVE": "olive",
           "CLOSED": "lightGray",
           "RESOLVED": "green",
-          "IN_PROGRESS": "orange"
+          "IN_PROGRESS": "orange",
+          "TRIAGE": "yellow"
         }
       },
       "link": {
@@ -33,7 +35,8 @@
       },
       "age": {
         "title": "Age (days)",
-        "type": "number"
+        "type": "number",
+        "description": "Age of the finding in days (not available from API)"
       },
       "severity": {
         "type": "string",

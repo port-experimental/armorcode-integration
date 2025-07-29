@@ -50,13 +50,14 @@ from typing import Any, Dict, List
 
 import requests
 from acsdk import ArmorCodeClient
+from armorcode_client import DirectArmorCodeClient
 from dotenv import load_dotenv
 
 # --- Setup ---
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # --- Constants ---
-PORT_API_URL = "https://api.getport.io/v1"
+PORT_API_URL = "https://api.us.getport.io/v1"
 
 # --- Port Client ---
 
@@ -80,8 +81,12 @@ def upsert_blueprint(blueprint: Dict[str, Any], token: str, dry_run: bool = Fals
         logging.info(f"[DRY RUN] Would upsert blueprint '{identifier}'.")
         return
 
+    logging.info(f"POSTing blueprint to {PORT_API_URL}/blueprints with identifier {identifier}")
+    logging.debug(f"Payload: {json.dumps(blueprint, indent=2)}")
     headers = {"Authorization": f"Bearer {token}"}
     response = requests.post(f"{PORT_API_URL}/blueprints", json=blueprint, headers=headers)
+    if response.status_code != 201:
+        logging.error(f"Failed to create blueprint: {response.status_code} - {response.text}")
     
     if response.status_code == 409: # Conflict, blueprint already exists
         logging.info(f"Blueprint '{identifier}' already exists. Attempting update.")
@@ -173,54 +178,91 @@ async def ingest_subproducts(ac_client: ArmorCodeClient, port_token: str, dry_ru
 async def ingest_findings_and_vulnerabilities(ac_client: ArmorCodeClient, port_token: str, dry_run: bool = False):
     """Ingests Armorcode Findings and their related Vulnerabilities into Port."""
     logging.info("Starting findings and vulnerabilities ingestion...")
-    findings = await ac_client.get_all_findings(status="ACTIVE")
+    logging.info("Fetching all findings from ArmorCode (this may take several minutes)...")
+    
+    # Use DirectArmorCodeClient specifically for findings since acsdk has issues with this endpoint
+    api_key = os.getenv("ARMORCODE_API_KEY")
+    async with DirectArmorCodeClient(api_key) as direct_client:
+        findings = await direct_client.get_all_findings()
     logging.info(f"Found {len(findings)} active findings in Armorcode.")
     
     processed_vulnerabilities = set()
+    processed_findings = 0
+    total_findings = len(findings)
+    
+    # Log progress every 10% or every 100 items, whichever is smaller
+    progress_interval = min(100, max(1, total_findings // 10))
 
-    for finding in findings:
+    for i, finding in enumerate(findings, 1):
         try:
-            # 1. Upsert the unique Vulnerability entity
-            vuln_data = finding.get("vulnerability")
-            if vuln_data and vuln_data.get("id"):
-                vuln_id = str(vuln_data["id"])
+            # 1. Create vulnerability entities from CVE data (if present)
+            vuln_id = None
+            cves = finding.get("cve", [])
+            if cves and len(cves) > 0:
+                # Use the first CVE as the primary vulnerability identifier
+                primary_cve = cves[0]
+                vuln_id = f"cve-{primary_cve.lower()}"
+                
                 if vuln_id not in processed_vulnerabilities:
                     vulnerability_entity = {
                         "identifier": vuln_id,
-                        "title": vuln_data.get("vulnerabilityName") or vuln_data.get("name"),
+                        "title": primary_cve,
                         "properties": {
-                            "name": vuln_data.get("vulnerabilityName") or vuln_data.get("name"),
-                            "cve": vuln_data.get("cve"),
-                            "severity": vuln_data.get("severity"),
-                            "description": vuln_data.get("description"),
-                            "remediation": vuln_data.get("remediation"),
+                            "name": primary_cve,
+                            "cve": primary_cve,
+                            "severity": finding.get("severity", "UNKNOWN"),
+                            "description": finding.get("description", ""),
+                            "remediation": finding.get("mitigation", ""),
+                        },
+                    }
+                    upsert_entity("armorcodeVulnerability", vulnerability_entity, port_token, dry_run=dry_run)
+                    processed_vulnerabilities.add(vuln_id)
+            else:
+                # For findings without CVEs, create a generic vulnerability based on the finding
+                vuln_id = f"finding-{finding['id']}"
+                if vuln_id not in processed_vulnerabilities:
+                    vulnerability_entity = {
+                        "identifier": vuln_id,
+                        "title": finding.get("title", "Unknown Vulnerability"),
+                        "properties": {
+                            "name": finding.get("title", "Unknown Vulnerability"),
+                            "cve": None,
+                            "severity": finding.get("severity", "UNKNOWN"),
+                            "description": finding.get("description", ""),
+                            "remediation": finding.get("mitigation", ""),
                         },
                     }
                     upsert_entity("armorcodeVulnerability", vulnerability_entity, port_token, dry_run=dry_run)
                     processed_vulnerabilities.add(vuln_id)
 
-                # 2. Upsert the Finding entity
-                finding_entity = {
-                    "identifier": str(finding["id"]),
-                    "title": finding.get("title"),
-                    "properties": {
-                        "title": finding.get("title"),
-                        "status": finding.get("status"),
-                        "severity": finding.get("severity"),
-                        "age": finding.get("age"),
-                        "tool": finding.get("tool", {}).get("name"),
-                        "link": finding.get("ticketUrl"), # Assuming ticketUrl holds the link
-                    },
-                    "relations": {
-                        "subProduct": str(finding["subProduct"]["id"]),
-                        "vulnerability": vuln_id,
-                    },
-                }
-                upsert_entity("armorcodeFinding", finding_entity, port_token, dry_run=dry_run)
+            # 2. Upsert the Finding entity with correct field mappings
+            finding_entity = {
+                "identifier": str(finding["id"]),
+                "title": finding.get("title", "Unknown Finding"),
+                "properties": {
+                    "title": finding.get("title", "Unknown Finding"),
+                    "status": finding.get("status", "UNKNOWN"),
+                    "severity": finding.get("severity", "UNKNOWN"),
+                    "age": None,  # Age is not provided in the API response
+                    "tool": finding.get("source", "Unknown Tool"),  # API uses 'source' not 'tool'
+                    "link": finding.get("findingUrl"),  # API uses 'findingUrl' not 'ticketUrl'
+                },
+                "relations": {
+                    "subProduct": str(finding["subProduct"]["id"]),
+                    "vulnerability": vuln_id,
+                },
+            }
+            upsert_entity("armorcodeFinding", finding_entity, port_token, dry_run=dry_run)
+            processed_findings += 1
         except Exception as e:
             logging.error(f"Failed to process finding {finding.get('id')}: {e}")
+        
+        # Log progress at intervals
+        if i % progress_interval == 0 or i == total_findings:
+            percentage = (i / total_findings) * 100
+            logging.info(f"Progress: {i}/{total_findings} findings processed ({percentage:.1f}%) - {len(processed_vulnerabilities)} unique vulnerabilities found")
             
-    logging.info("Findings and vulnerabilities ingestion finished.")
+    logging.info(f"Findings and vulnerabilities ingestion finished. Processed {processed_findings} findings and {len(processed_vulnerabilities)} unique vulnerabilities.")
 
 
 # --- Main Execution ---
@@ -239,7 +281,15 @@ async def main(dry_run: bool = False):
     # 2. Setup Blueprints
     logging.info("Setting up Port blueprints...")
     blueprints_path = Path(__file__).parent / "blueprints"
-    for blueprint_file in blueprints_path.glob("*.json"):
+    ordered_blueprints = [
+        "product.json",
+        "subproduct.json",
+        "vulnerability.json",
+        "finding.json"
+    ]
+
+    for bp_filename in ordered_blueprints:
+        blueprint_file = blueprints_path / bp_filename
         with open(blueprint_file, "r") as f:
             blueprint_data = json.load(f)
             upsert_blueprint(blueprint_data, port_token, dry_run=dry_run)
