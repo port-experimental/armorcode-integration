@@ -1,10 +1,10 @@
-# ArmorCode Integration for Port.io
+# ArmorCode Integration for Port
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A professional Python package for integrating ArmorCode security data with Port's developer portal, providing comprehensive visibility into your applications, repositories, and security findings.
+An Armorcode integration to ingest its data into Port's developer portal, providing comprehensive visibility into your applications, repositories, and security findings.
 
 ## 🚀 Overview
 
