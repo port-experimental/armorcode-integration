@@ -3,4 +3,5 @@ python-dotenv
 git+https://github.com/armor-code/acsdk
 pytest
 pytest-asyncio
-aiohttp 
+aiohttp
+aioresponses 

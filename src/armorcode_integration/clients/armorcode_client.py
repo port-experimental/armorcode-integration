@@ -6,7 +6,7 @@ This module provides a direct HTTP-based client for the ArmorCode API,
 replacing the acsdk dependency with native aiohttp calls.
 
 Usage:
-    from armorcode_client import DirectArmorCodeClient
+    from armorcode_integration.clients.armorcode_client import DirectArmorCodeClient
     
     async with DirectArmorCodeClient(api_key) as client:
         findings = await client.get_all_findings()
@@ -214,16 +214,20 @@ class DirectArmorCodeClient:
         
     async def get_all_findings(self, 
                               filters: Optional[Dict[str, Any]] = None,
-                              page_size: int = 1000) -> List[Dict[str, Any]]:
+                              page_size: int = 1000,
+                              max_pages: Optional[int] = None,
+                              max_findings: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Get all findings from ArmorCode API with automatic pagination.
         
         This method provides the same interface as the original acsdk.ArmorCodeClient.get_all_findings()
-        but uses direct HTTP calls with proper pagination handling.
+        but uses direct HTTP calls with proper pagination handling and safety limits.
         
         Args:
             filters: Optional filters to apply to findings query
             page_size: Number of findings per page (default: 1000, max: 1000)
+            max_pages: Maximum number of pages to fetch (default: None = unlimited)
+            max_findings: Maximum total findings to fetch (default: None = unlimited)
             
         Returns:
             List of all findings matching the criteria
@@ -232,7 +236,13 @@ class DirectArmorCodeClient:
         after_key = None
         page_num = 1
         
-        self.logger.info("Starting to fetch all findings with pagination...")
+        # Set default safety limits
+        if max_pages is None:
+            max_pages = 1000  # Default safety limit: 100 pages = up to 100k findings
+        if max_findings is None:
+            max_findings = 150000  # Default safety limit: 50k findings
+        
+        self.logger.info(f"Starting to fetch findings with pagination (max {max_pages} pages, max {max_findings} findings)...")
         
         while True:
             try:
@@ -257,6 +267,15 @@ class DirectArmorCodeClient:
                 self.logger.info(f"Page {page_num}: Retrieved {len(findings)} findings "
                                f"(total so far: {len(all_findings)})")
                 
+                # Check safety limits
+                if len(all_findings) >= max_findings:
+                    self.logger.warning(f"Reached max findings limit ({max_findings}). Stopping pagination.")
+                    break
+                
+                if page_num >= max_pages:
+                    self.logger.warning(f"Reached max pages limit ({max_pages}). Stopping pagination.")
+                    break
+                
                 # Check for next page
                 after_key = data.get('afterKey')
                 if after_key is None:
@@ -265,8 +284,10 @@ class DirectArmorCodeClient:
                     
                 page_num += 1
                 
-                # Optional: Add small delay between requests to be respectful
-                await asyncio.sleep(0.1)
+                # Add delay and progress reporting for large datasets
+                if page_num % 10 == 0:
+                    self.logger.info(f"Progress: {page_num} pages processed, {len(all_findings)} findings collected...")
+                await asyncio.sleep(0.5)  # Increased delay to be more respectful
                 
             except ArmorCodeAPIError as e:
                 self.logger.error(f"API error while fetching page {page_num}: {e}")
@@ -298,4 +319,4 @@ class DirectArmorCodeClient:
             self.logger.error(f"Connection test failed with unexpected error: {e}")
             return False
             
-# Note: We only implement the findings methods here since acsdk works fine for products/subproducts 
+# Note: We only implement the findings methods here since acsdk works fine for products/subproducts
